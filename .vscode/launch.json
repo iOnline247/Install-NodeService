@@ -8,7 +8,7 @@
             "name": "PowerShell",
             "type": "PowerShell",
             "request": "launch",
-            "args": ["-LogginEnabled"],
+            "args": ["-EnableLogging"],
             "script": "${file}"
         },
     ]
