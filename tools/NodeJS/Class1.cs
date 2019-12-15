@@ -45,7 +45,8 @@ public enum Win32Error : int
     ERROR_PROCESS_ABORTED = 1067,
 };
 
-public class Service_1 : ServiceBase { // $serviceName may begin with a digit; The class name must begin with a letter
+public class Service_1 : ServiceBase
+{ // $serviceName may begin with a digit; The class name must begin with a letter
     private EventLog eventLog;
     private ServiceStatus serviceStatus;
     private ManualResetEvent _shutdownEvent;
@@ -85,46 +86,21 @@ public class Service_1 : ServiceBase { // $serviceName may begin with a digit; T
         // https://gist.github.com/elerch/5628117
         try
         {
-            Thread thread = new Thread(WorkerThreadFunc);
+            _shutdownEvent = new ManualResetEvent(false);
+            thread = new Thread(WorkerThreadFunc)
+            {
+                Name = "NodeJS Worker",
+                IsBackground = true
+            };
 
             thread.Start();
-            //Process p = new Process();
-            //// Redirect the output stream of the child process.
-            //p.StartInfo.UseShellExecute = false;
-            //p.StartInfo.RedirectStandardOutput = true;
-            Process p = new Process();
-
-            p.StartInfo.WorkingDirectory = @"C:\Users\mbramer\source\repos\NodeJS\bin\Debug";
-            // p.StartInfo.FileName = @"C:\Program Files\nodejs\node.exe";
-            p.StartInfo.CreateNoWindow = true;
-            p.StartInfo.RedirectStandardInput = true;
-            p.StartInfo.RedirectStandardOutput = true;
-            p.StartInfo.UseShellExecute = false;
-            p.StartInfo.RedirectStandardError = true;
-            p.StartInfo.FileName = @"C:\Program Files\nodejs\node.exe";
-            // string arguments = @" C:\Users\mbramer\source\repos\NodeJS\bin\Debug\index.js";
-
-            p.StartInfo.Arguments = @" index.js";
-            // p.StartInfo.Arguments = @"/c 'C:\Program Files\nodejs\node.exe' 'C:\Users\mbramer\source\repos\NodeJS\bin\Debug\index.js'"; // TODO: Get args sorted for node.exe. // Works if path has spaces, but not if it contains ' quotes.
-            bool hasStarted = p.Start();
-
-            p.BeginOutputReadLine();
-            string errors = p.StandardError.ReadToEnd();
-            // Read the output stream first and then wait. (To avoid deadlocks says Microsoft!)
-            // string output = p.StandardOutput.ReadToEnd();
-            // Wait for the completion of the script startup code, that launches the -Service instance
-            p.WaitForExit();
-            if (p.ExitCode != 0)
-            {
-                throw new Win32Exception((int)(Win32Error.ERROR_APP_INIT_FAILURE));
-            }
             // Success. Set the service state to Running.
             serviceStatus.dwCurrentState = ServiceState.SERVICE_RUNNING;
         }
         catch (Exception e)
         {
             EventLog.WriteEntry(ServiceName, "$exeName OnStart() // Failed to start $scriptCopyCname. " + e.Message, EventLogEntryType.Error); // EVENT LOG
-            
+
             // Change the service state back to Stopped.
             serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
             Win32Exception w32ex = e as Win32Exception; // Try getting the WIN32 error code
@@ -157,12 +133,12 @@ public class Service_1 : ServiceBase { // $serviceName may begin with a digit; T
         {
             _shutdownEvent.Set();
             if (!thread.Join(3000))
-            { // give the thread 3 seconds to stop
+            {
+                // give the thread 3 seconds to stop
                 thread.Abort();
             }
 
             // throw new Win32Exception((int)(Win32Error.ERROR_APP_INIT_FAILURE));
-            
 
             serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
         }
@@ -174,17 +150,17 @@ public class Service_1 : ServiceBase { // $serviceName may begin with a digit; T
             Win32Exception w32ex = e as Win32Exception; // Try getting the WIN32 error code
 
             if (w32ex == null)
-            { 
+            {
                 // Not a Win32 exception, but maybe the inner one is...
                 w32ex = e.InnerException as Win32Exception;
             }
             if (w32ex != null)
-            {    
+            {
                 // Report the actual WIN32 error
                 serviceStatus.dwWin32ExitCode = w32ex.NativeErrorCode;
             }
             else
-            {                
+            {
                 // Make up a reasonable reason
                 serviceStatus.dwWin32ExitCode = (int)(Win32Error.ERROR_APP_INIT_FAILURE);
             }
@@ -201,8 +177,65 @@ public class Service_1 : ServiceBase { // $serviceName may begin with a digit; T
     {
         while (!_shutdownEvent.WaitOne(0))
         {
-            // Replace the Sleep() call with the work you need to do
-            Thread.Sleep(1000);
+            Process p = null;
+
+            if (p != null)
+            {
+                continue;
+            }
+
+            try
+            {
+                p = new Process();
+
+                p.StartInfo.WorkingDirectory = @"C:\Users\mbramer\Documents\Install-NodeService\tools\NodeJS\bin\Debug";
+                p.StartInfo.CreateNoWindow = true;
+                p.StartInfo.RedirectStandardInput = true;
+                p.StartInfo.RedirectStandardOutput = true;
+                p.StartInfo.UseShellExecute = false;
+                p.StartInfo.RedirectStandardError = true;
+                p.StartInfo.FileName = @"C:\Program Files\nodejs\node.exe";
+                p.StartInfo.Arguments = @" index.js"; // TODO: Get args sorted for node.exe. // Works if path has spaces, but not if it contains ' quotes.
+
+                bool hasStarted = p.Start();
+
+                p.BeginOutputReadLine();
+                string errors = p.StandardError.ReadToEnd();
+                // Read the output stream first and then wait. (To avoid deadlocks says Microsoft!)
+                // string output = p.StandardOutput.ReadToEnd();
+                // Wait for the completion of the script startup code, that launches the -Service instance
+                p.WaitForExit();
+                if (p.ExitCode != 0)
+                {
+                    throw new Win32Exception((int)(Win32Error.ERROR_APP_INIT_FAILURE));
+                }
+            }
+            catch (Exception e)
+            {
+                EventLog.WriteEntry(ServiceName, "$exeName OnStart() // Failed to start $scriptCopyCname. " + e.Message, EventLogEntryType.Error); // EVENT LOG
+
+                // Change the service state back to Stopped.
+                serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
+                Win32Exception w32ex = e as Win32Exception; // Try getting the WIN32 error code
+                if (w32ex == null)
+                { // Not a Win32 exception, but maybe the inner one is...
+                    w32ex = e.InnerException as Win32Exception;
+                }
+                if (w32ex != null)
+                {    // Report the actual WIN32 error
+                    serviceStatus.dwWin32ExitCode = w32ex.NativeErrorCode;
+                }
+                else
+                {
+                    serviceStatus.dwWin32ExitCode = (int)(Win32Error.ERROR_APP_INIT_FAILURE);
+                }
+            }
+            finally
+            {
+                serviceStatus.dwWaitHint = 0;
+                SetServiceStatus(ServiceHandle, ref serviceStatus);
+                EventLog.WriteEntry(ServiceName, "$exeName OnStart() // Exit");
+            }
         }
     }
     public static void Main()
