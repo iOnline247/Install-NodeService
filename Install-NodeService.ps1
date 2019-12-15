@@ -282,20 +282,17 @@ public class Service_1 : ServiceBase
 
      
   Function New-NodeServiceInstall ($binPath) {
-    # $exePath = "$(Join-Path $InstallPath $serviceName).exe"
-
-    New-Item -ItemType Directory -Force -Path $InstallPath > $null
-    Copy-Item -Path ".\bin\*" -Destination $InstallPath -Force
-      
-    if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
-      # The Mickey Mouse Console prevents handles of services to be released.
-      Get-Process -Name "mmc" | Stop-Process
-      
-      Write-Output "Deleting the existing $serviceName service...";
-      # Remove the service prior to installation.
-      sc.exe delete $serviceName > $null
-      
-      Write-Output "$serviceName service has been deleted.";
+    if ($DeleteService) {
+      if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
+        # The Mickey Mouse Console prevents handles of services to be released.
+        Get-Process -Name "mmc" | Stop-Process
+        
+        Write-Output "Deleting the existing $serviceName service...";
+        # Remove the service prior to installation.
+        sc.exe delete $serviceName > $null
+        
+        Write-Output "$serviceName service has been deleted.";
+      }
     }
       
     Write-Output "Installing the $serviceName service...";
@@ -314,14 +311,25 @@ public class Service_1 : ServiceBase
 
   try {
     Write-Verbose "Compiling $exeFullName"
+    New-Item -ItemType Directory -Force -Path $InstallPath > $null
     Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
   }
   catch {
     $msg = $_.Exception.Message
-    Write-error "Failed to create the $exeFullName service stub. $msg"
+    Write-error "Failed to compile the $exeFullName service. $msg"
     exit 1
-  }          
+  }
+  
+  try {
+    New-NodeServiceInstall -binPath $exeFullName
+  }
+  catch {
+    $msg = $_.Exception.Message
+    Write-error "Failed to create the new $exeFullName service. $msg"
+    exit 1
+  }
+  
 }
 
-Install-NodeService
+Install-NodeService # Use for debugging.
     
