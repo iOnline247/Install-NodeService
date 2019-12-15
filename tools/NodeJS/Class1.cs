@@ -1,8 +1,8 @@
 ﻿using System;
-using System.ServiceProcess;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.ComponentModel;
+using System.ServiceProcess;
 using System.Threading;
 
 public enum ServiceType : int
@@ -74,7 +74,7 @@ public class Service_1 : ServiceBase
 
     protected override void OnStart(string[] args)
     {
-        EventLog.WriteEntry(ServiceName, "$exeName OnStart() // Entry. Starting script '$scriptCopyCname' -SCMStart"); // TODO: Change this messaging.
+        EventLog.WriteEntry(ServiceName, "$exeName OnStart() // Entry.");
         // Set the service state to Start Pending.
         // Only useful if the startup time is long. Not really necessary here for a 2s startup time.
         serviceStatus.dwServiceType = ServiceType.SERVICE_WIN32_OWN_PROCESS;
@@ -127,56 +127,18 @@ public class Service_1 : ServiceBase
 
     protected override void OnStop()
     {
-        EventLog.WriteEntry(ServiceName, "$exeName OnStop() // Entry");   // EVENT LOG
+        EventLog.WriteEntry(ServiceName, "$exeName OnStop()");
 
-        try
-        {
-            _shutdownEvent.Set();
-            if (!thread.Join(3000))
-            {
-                // give the thread 3 seconds to stop
-                thread.Abort();
-            }
-
-            // throw new Win32Exception((int)(Win32Error.ERROR_APP_INIT_FAILURE));
-
-            serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
-        }
-        catch (Exception e)
-        {
-            EventLog.WriteEntry(ServiceName, "$exeName OnStop() // Failed to stop $scriptCopyCname. " + e.Message, EventLogEntryType.Error); // EVENT LOG
-                                                                                                                                             // Change the service state back to Started.                    // SET STATUS [
-            serviceStatus.dwCurrentState = ServiceState.SERVICE_RUNNING;
-            Win32Exception w32ex = e as Win32Exception; // Try getting the WIN32 error code
-
-            if (w32ex == null)
-            {
-                // Not a Win32 exception, but maybe the inner one is...
-                w32ex = e.InnerException as Win32Exception;
-            }
-            if (w32ex != null)
-            {
-                // Report the actual WIN32 error
-                serviceStatus.dwWin32ExitCode = w32ex.NativeErrorCode;
-            }
-            else
-            {
-                // Make up a reasonable reason
-                serviceStatus.dwWin32ExitCode = (int)(Win32Error.ERROR_APP_INIT_FAILURE);
-            }
-        }
-        finally
-        {
-            serviceStatus.dwWaitHint = 0;
-            SetServiceStatus(ServiceHandle, ref serviceStatus);
-            EventLog.WriteEntry(ServiceName, "$exeName OnStop() // Exit");
-        }
+        _shutdownEvent.Set();
     }
 
     private void WorkerThreadFunc()
     {
+        int numOfFailures = 0;
+
         while (!_shutdownEvent.WaitOne(0))
         {
+            // Thread is locked until process has exited.
             Process p = null;
 
             if (p != null)
@@ -190,51 +152,37 @@ public class Service_1 : ServiceBase
 
                 p.StartInfo.WorkingDirectory = @"C:\Users\mbramer\Documents\Install-NodeService\tools\NodeJS\bin\Debug";
                 p.StartInfo.CreateNoWindow = true;
-                p.StartInfo.RedirectStandardInput = true;
-                p.StartInfo.RedirectStandardOutput = true;
                 p.StartInfo.UseShellExecute = false;
                 p.StartInfo.RedirectStandardError = true;
                 p.StartInfo.FileName = @"C:\Program Files\nodejs\node.exe";
                 p.StartInfo.Arguments = @" index.js"; // TODO: Get args sorted for node.exe. // Works if path has spaces, but not if it contains ' quotes.
 
                 bool hasStarted = p.Start();
-
-                p.BeginOutputReadLine();
-                string errors = p.StandardError.ReadToEnd();
                 // Read the output stream first and then wait. (To avoid deadlocks says Microsoft!)
-                // string output = p.StandardOutput.ReadToEnd();
-                // Wait for the completion of the script startup code, that launches the -Service instance
+                string nodeError = p.StandardError.ReadToEnd();
+
                 p.WaitForExit();
-                if (p.ExitCode != 0)
+                if (p.ExitCode == 0)
                 {
-                    throw new Win32Exception((int)(Win32Error.ERROR_APP_INIT_FAILURE));
+                    Stop();
+                    break;
+                } 
+                else
+                {
+                    throw new Exception(nodeError);
                 }
             }
             catch (Exception e)
             {
-                EventLog.WriteEntry(ServiceName, "$exeName OnStart() // Failed to start $scriptCopyCname. " + e.Message, EventLogEntryType.Error); // EVENT LOG
+                numOfFailures++;
 
-                // Change the service state back to Stopped.
-                serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
-                Win32Exception w32ex = e as Win32Exception; // Try getting the WIN32 error code
-                if (w32ex == null)
-                { // Not a Win32 exception, but maybe the inner one is...
-                    w32ex = e.InnerException as Win32Exception;
-                }
-                if (w32ex != null)
-                {    // Report the actual WIN32 error
-                    serviceStatus.dwWin32ExitCode = w32ex.NativeErrorCode;
-                }
-                else
+                if (numOfFailures > 6)
                 {
-                    serviceStatus.dwWin32ExitCode = (int)(Win32Error.ERROR_APP_INIT_FAILURE);
+                    EventLog.WriteEntry(ServiceName, e.Message, EventLogEntryType.Error);
+                    // Change the service state back to Stopped.
+                    serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
+                    Stop();
                 }
-            }
-            finally
-            {
-                serviceStatus.dwWaitHint = 0;
-                SetServiceStatus(ServiceHandle, ref serviceStatus);
-                EventLog.WriteEntry(ServiceName, "$exeName OnStart() // Exit");
             }
         }
     }
