@@ -7,7 +7,7 @@
 ###############################################################################
 
 Function Install-NodeService () {
-  <#
+    <#
     .SYNOPSIS
     Creates Windows Service that monitors/restarts a NodeJS application.
 
@@ -33,58 +33,52 @@ Function Install-NodeService () {
       TODO
   #>
   
-  Param (
-    #   [Parameter(ParameterSetName='InputObject', Position=0, ValueFromPipeline=$true, Mandatory=$true)]
-    #   [Object]$InputObject,			# Optional input objects
+    Param (
+        #   [Parameter(ParameterSetName='InputObject', Position=0, ValueFromPipeline=$true, Mandatory=$true)]
+        #   [Object]$InputObject,			# Optional input objects
       
-    [Parameter(Mandatory = $true)]
-    [string]$ServiceName,
-      
-    [Parameter(Mandatory = $true)]
-    [string]$InstallationPath,
+        [Parameter(Mandatory = $true)]
+        [string]$ServiceName,
 
-    [Parameter(Mandatory = $true)]
-    [pscredential]
-    $Credential
-    #(Get-Credential -UserName ".\LocalSystem" -Message "Type the service account credentials.")    
+        [Parameter(Mandatory = $false)]
+        [string]$Description,
 
-    #   [Parameter(ParameterSetName='ScriptBlock', Position=1)]
-    #   [ScriptBlock]$ScriptBlock,		# Optional script block
+        [Parameter(Mandatory = $false)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$InstallationPath,
+
+        [Parameter(Mandatory = $true)]
+        [pscredential]
+        $Credential
+        #(Get-Credential -UserName ".\LocalSystem" -Message "Type the service account credentials.")    
+
+        #   [Parameter(ParameterSetName='ScriptBlock', Position=1)]
+        #   [ScriptBlock]$ScriptBlock,		# Optional script block
       
-    #   [Parameter(ParameterSetName='InputObject')]
-    #   [Parameter(ParameterSetName='ScriptBlock')]
-    #   [Switch]$D,				# Debug mode
+        #   [Parameter(ParameterSetName='InputObject')]
+        #   [Parameter(ParameterSetName='ScriptBlock')]
+        #   [Switch]$D,				# Debug mode
       
-    #   [Switch]$Version			# If true, display the script version
+        #   [Switch]$Version			# If true, display the script version
       
-    <#
+        <#
         name:'Hello World',
-        description: 'The nodejs.org example web server.',
-        script: 'C:\\path\\to\\helloworld.js',
-      runtimeArgs: [
-          '--harmony',
-          '--max_old_space_size=4096'
-      ],
-        env: [{
-          name: "HOME",
-          value: process.env["USERPROFILE"] // service is now able to access the user who created its' home directory
-        },
-        {
-          name: "TEMP",
-          value: path.join(process.env["USERPROFILE"],"/temp") // use a temp directory in user's home directory
-        }]
 
         # C:\Program Files\nodejs\node.exe --harmony -r esm --inspect-brk=26402 lambdas\ProcessRetryItems\debug.js test 
       #>
-  )
-      
+    )
   
-  $nodePath = (Get-Command -Name node -ErrorAction Stop).Path
-  $exeName = "$ServiceName.exe"
-  $exeFullName = "$(Join-Path $InstallPath $serviceName).exe"
-  $logName = "Application"
+    # Force create the install directory.
+    New-Item -ItemType Directory -Force -Path $InstallationPath > $null
 
-  $source = @"
+    $nodePath = (Get-Command -Name node -ErrorAction Stop).Path
+    $exeName = "$ServiceName.exe"
+    $exeFullName = "$(Join-Path $InstallationPath $serviceName).exe"
+    $logName = "Application"
+
+    $source = @"
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -281,53 +275,68 @@ public class Service_1 : ServiceBase
 "@
 
      
-  Function New-NodeServiceInstall ($binPath) {
-    if ($DeleteService) {
-      if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
-        # The Mickey Mouse Console prevents handles of services to be released.
-        Get-Process -Name "mmc" | Stop-Process
+    Function New-NodeServiceInstall ($binPath) {
+        if ($DeleteService) {
+            if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
+                # The Mickey Mouse Console prevents handles of services to be released.
+                Get-Process -Name "mmc" | Stop-Process
         
-        Write-Output "Deleting the existing $serviceName service...";
-        # Remove the service prior to installation.
-        sc.exe delete $serviceName > $null
+                Write-Output "Deleting the existing $serviceName service...";
+                # Remove the service prior to installation.
+                sc.exe delete $serviceName > $null
         
-        Write-Output "$serviceName service has been deleted.";
-      }
-    }
+                Write-Output "$serviceName service has been deleted.";
+            }
+        }
       
-    Write-Output "Installing the $serviceName service...";
-      
-    New-Service -Credential $Credential -StartupType Automatic `
-      -BinaryPathName $binPath -Name $serviceName -DisplayName "TODO: Add DisplayName support." `
-      -Description "TODO: Add Service Description Support." `
-      -ErrorAction Stop > $null
-      
-    Write-Output "$serviceName service has been installed.";
-      
-    Get-Service $serviceName | Start-Service
-      
-    Write-Output "The $serviceName service is now operational.";
-  }
+        Write-Output "Installing the $serviceName service...";
+    
+        $scriptVars = @{
+            BinaryPathName = $binPath
+            Credential     = $Credential
+            DisplayName    = if ($DisplayName) { $DisplayName } else { $ServiceName }
+            Name           = $serviceName
+            StartupType    = "Automatic"
+        }
+        $descriptionFooter = "This service was brought to you by Matthew Bramer and is maintained here: https://github.com/iOnline247/Install-NodeService"
 
-  try {
-    Write-Verbose "Compiling $exeFullName"
-    New-Item -ItemType Directory -Force -Path $InstallPath > $null
-    Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
-  }
-  catch {
-    $msg = $_.Exception.Message
-    Write-error "Failed to compile the $exeFullName service. $msg"
-    exit 1
-  }
+        if ($Description) {
+            $scriptVars.Description = $Description, $descriptionFooter -join "`n`n"
+        }
+        else {
+            $scriptVars.Description = $descriptionFooter
+        }
+
+        # if ($Credential) {
+        #   $scriptVars.Credential = $Credential
+        # }
+
+        New-Service @scriptVars -ErrorAction Stop > $null
+        Write-Output "$serviceName service has been installed.";
+        Get-Service $serviceName | Start-Service
+        Write-Output "The $serviceName service is now operational.";
+    }
+
+    try {
+        Write-Verbose "Compiling $exeFullName"
+        Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
+    }
+    catch {
+        $msg = $_.Exception.Message
+
+        Write-error "Failed to compile the $exeFullName service. $msg"
+        exit 1
+    }
   
-  try {
-    New-NodeServiceInstall -binPath $exeFullName
-  }
-  catch {
-    $msg = $_.Exception.Message
-    Write-error "Failed to create the new $exeFullName service. $msg"
-    exit 1
-  }
+    try {
+        New-NodeServiceInstall -binPath $exeFullName
+    }
+    catch {
+        $msg = $_.Exception.Message
+        
+        Write-error "Failed to create the new $exeFullName service. $msg"
+        exit 1
+    }
   
 }
 
