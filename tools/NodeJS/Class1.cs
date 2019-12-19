@@ -54,7 +54,7 @@ public class Service_1 : ServiceBase
 
     public Service_1() // TODO: Add the $serviceName back.
     {
-        Thread.Sleep(20 * 1000);
+        // Thread.Sleep(20 * 1000); // Use for debugging.
         ServiceName = "NodeJSService";  // $serviceName
         CanStop = true;
         CanPauseAndContinue = false;
@@ -166,7 +166,7 @@ public class Service_1 : ServiceBase
                 {
                     Stop();
                     break;
-                } 
+                }
                 else
                 {
                     throw new Exception(nodeError);
