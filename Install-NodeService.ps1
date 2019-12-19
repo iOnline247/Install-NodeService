@@ -49,20 +49,17 @@ Function Install-NodeService () {
         [Parameter(Mandatory = $true)]
         [string]$InstallationPath,
 
+        [Parameter(Mandatory = $false)]
+        [Hashtable]$EnvironmentVars = @{ },
+        
         [Parameter(Mandatory = $true)]
         [pscredential]
-        $Credential
+        $Credential,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Overwrite
         #(Get-Credential -UserName ".\LocalSystem" -Message "Type the service account credentials.")    
 
-        #   [Parameter(ParameterSetName='ScriptBlock', Position=1)]
-        #   [ScriptBlock]$ScriptBlock,		# Optional script block
-      
-        #   [Parameter(ParameterSetName='InputObject')]
-        #   [Parameter(ParameterSetName='ScriptBlock')]
-        #   [Switch]$D,				# Debug mode
-      
-        #   [Switch]$Version			# If true, display the script version
-      
         <#
         name:'Hello World',
 
@@ -77,6 +74,15 @@ Function Install-NodeService () {
     $exeName = "$ServiceName.exe"
     $exeFullName = "$(Join-Path $InstallationPath $serviceName).exe"
     $logName = "Application"
+    $envVars = [string]::Empty
+    
+    foreach ($key in $EnvironmentVars.Keys) {
+        $value = $EnvironmentVars[$key];
+        $isBoolean = $value -is [boolean]
+        $value = if ($isBoolean) { "$($value)".ToLower() } else { $value }; 
+
+        $envVars += "Environment.SetEnvironmentVariable(`"$key`", `"$($value)`");"
+    }
 
     $source = @"
 using System;
@@ -217,6 +223,8 @@ public class Service_1 : ServiceBase
     {
         int numOfFailures = 0;
 
+        {{EnvironmentVars}}
+
         while (!_shutdownEvent.WaitOne(0))
         {
             // Thread is locked until process has exited.
@@ -274,21 +282,9 @@ public class Service_1 : ServiceBase
 }
 "@
 
+    $source = $source.Replace("{{EnvironmentVars}}", $envVars);
      
-    Function New-NodeServiceInstall ($binPath) {
-        if ($DeleteService) {
-            if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
-                # The Mickey Mouse Console prevents handles of services to be released.
-                Get-Process -Name "mmc" | Stop-Process
-        
-                Write-Output "Deleting the existing $serviceName service...";
-                # Remove the service prior to installation.
-                sc.exe delete $serviceName > $null
-        
-                Write-Output "$serviceName service has been deleted.";
-            }
-        }
-      
+    Function New-NodeServiceInstall ($binPath) {      
         Write-Output "Installing the $serviceName service...";
     
         $scriptVars = @{
@@ -307,10 +303,6 @@ public class Service_1 : ServiceBase
             $scriptVars.Description = $descriptionFooter
         }
 
-        # if ($Credential) {
-        #   $scriptVars.Credential = $Credential
-        # }
-
         New-Service @scriptVars -ErrorAction Stop > $null
         Write-Output "$serviceName service has been installed.";
         Get-Service $serviceName | Start-Service
@@ -318,13 +310,27 @@ public class Service_1 : ServiceBase
     }
 
     try {
+        if ($Overwrite) {
+            if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
+                # The Mickey Mouse Console prevents handles of services to be released.
+                Get-Process -Name "mmc" | Stop-Process > $null
+        
+                Write-Output "Deleting the existing $serviceName service...";
+                Stop-Service $serviceName -Force
+                # Remove the service prior to installation.
+                sc.exe delete $serviceName > $null
+        
+                Write-Output "$serviceName service has been deleted.";
+            }
+        }
+
         Write-Verbose "Compiling $exeFullName"
         Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
     }
     catch {
         $msg = $_.Exception.Message
 
-        Write-error "Failed to compile the $exeFullName service. $msg"
+        Write-error "Failed to **COMPILE** the $exeFullName service. $msg"
         exit 1
     }
   
@@ -334,11 +340,14 @@ public class Service_1 : ServiceBase
     catch {
         $msg = $_.Exception.Message
         
-        Write-error "Failed to create the new $exeFullName service. $msg"
+        Write-error "Failed to **CREATE** the new $exeFullName Windows Service. $msg"
         exit 1
     }
   
 }
 
-Install-NodeService # Use for debugging.
+# $password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
+# $creds = New-Object System.Management.Automation.PSCredential("NT AUTHORITY\NETWORK SERVICE", (new-object System.Security.SecureString));
+# $creds = New-Object System.Management.Automation.PSCredential(".\LocalSystem", (new-object System.Security.SecureString));
+#  Install-NodeService -ServiceName MPBTest -InstallationPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -Credential $creds -Overwrite
     
