@@ -65,12 +65,6 @@ Function Install-NodeService () {
         [Parameter(Mandatory = $false)]
         [switch]$Overwrite
         #(Get-Credential -UserName ".\LocalSystem" -Message "Type the service account credentials.")    
-
-        <#
-        name:'Hello World',
-
-        # C:\Program Files\nodejs\node.exe --harmony -r esm --inspect-brk=26402 lambdas\ProcessRetryItems\debug.js test 
-      #>
     )
   
     if ($ScriptPath.Contains("'")) {
