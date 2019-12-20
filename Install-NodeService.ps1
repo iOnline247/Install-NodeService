@@ -49,6 +49,9 @@ Function Install-NodeService () {
         [Parameter(Mandatory = $true)]
         [string]$InstallPath,
 
+        [Parameter(Mandatory = $false)]
+        [Hashtable]$EnvironmentVars = @{ },
+        
         [Parameter(Mandatory = $true)]
         [string]$ScriptPath,
 
