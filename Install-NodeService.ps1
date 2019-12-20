@@ -16,27 +16,48 @@ Function Install-NodeService () {
 
     .PARAMETER ServiceName
     Required [string] This will be the name of the Windows Service.
-
+    
     .PARAMETER InstallPath
     Required [string] Path where the Windows Service will be installed.
+    This should *not* contain ' characters.
+
+    .PARAMETER ScriptPath
+    Required [string] Path to where the .js is that will run in NodeJS.
+
+    .PARAMETER DisplayName
+    Optional [string] Used for adding a Display Name that's different than
+    the ServiceName.
+
+    .PARAMETER Description
+    Optional [string] Used for adding a description to the Windows Service.
+
+    .PARAMETER RuntimeArgs
+    Optional [string[]] Pass an array of strings that will be used for NodeJS.
+    ex: -RuntimeArgs @("--harmony", "-r", "esm")
+
+    .PARAMETER EnvironmentVars
+    Optional [Hashtable] Pass environment variables to the NodeJS process.
+    ex: -EnvironmentVars @{ NODE_ENV = "DEV"; LOG_LEVEL = "Trace" }
 
     .PARAMETER Credential
-    Optional PSCredential object. For example, create it with commands like:
+    Optional [PSCredential] Configures service account for the Windows Service.
+    If not used, the default .\LocalSystem will be used.
+    
+    ex:
     $password = ConvertTo-SecureString "PASSWORD" -AsPlainText -Force
     $cred = New-Object System.Management.Automation.PSCredential "USERNAME", $password
 
-    .PARAMETER EnableLogging
-    Using this switch, the Windows Services will create a daily rolling 
-    log file in the <NODE_APP>\logs\datetimestamp.log
+    .PARAMETER Overwrite
+    Optional [switch] Use with caution. This will overwrite whatever ServiceName that is given.
 
     .EXAMPLE
-      TODO
+    $password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
+    $creds = New-Object System.Management.Automation.PSCredential("DOMAIN\USERNAME", $password);
+    
+    Install-NodeService -ServiceName MPBTest -InstallPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
   #>
   
-    Param (
-        #   [Parameter(ParameterSetName='InputObject', Position=0, ValueFromPipeline=$true, Mandatory=$true)]
-        #   [Object]$InputObject,			# Optional input objects
-      
+    Param (      
         [Parameter(Mandatory = $true)]
         [string]$ServiceName,
 
@@ -58,16 +79,12 @@ Function Install-NodeService () {
         [Parameter(Mandatory = $false)]
         [string[]]$RuntimeArgs = @(),
 
-        [Parameter(Mandatory = $false)]
-        [Hashtable]$EnvironmentVars = @{ },
-        
         [Parameter(Mandatory = $true)]
         [pscredential]
         $Credential,
 
         [Parameter(Mandatory = $false)]
         [switch]$Overwrite
-        #(Get-Credential -UserName ".\LocalSystem" -Message "Type the service account credentials.")    
     )
   
     if ($ScriptPath.Contains("'")) {
@@ -276,7 +293,7 @@ public class Service_1 : ServiceBase
             {
                 numOfFailures++;
 
-                if (numOfFailures > 6)
+                if (numOfFailures > 6) // TODO: Make this configurable.
                 {
                     EventLog.WriteEntry("$ServiceName", e.Message, EventLogEntryType.Error);
                     // Change the service state back to Stopped.
@@ -359,4 +376,4 @@ public class Service_1 : ServiceBase
 # $password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
 # $creds = New-Object System.Management.Automation.PSCredential("NT AUTHORITY\NETWORK SERVICE", (new-object System.Security.SecureString));
 # $creds = New-Object System.Management.Automation.PSCredential(".\LocalSystem", (new-object System.Security.SecureString));
-# Install-NodeService -ServiceName MPBTest -InstallPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite    
+# Install-NodeService -ServiceName MPBTest -InstallPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
