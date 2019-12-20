@@ -17,7 +17,7 @@ Function Install-NodeService () {
     .PARAMETER ServiceName
     Required [string] This will be the name of the Windows Service.
 
-    .PARAMETER InstallationPath
+    .PARAMETER InstallPath
     Required [string] Path where the Windows Service will be installed.
 
     .PARAMETER Credential
@@ -47,7 +47,13 @@ Function Install-NodeService () {
         [string]$DisplayName,
 
         [Parameter(Mandatory = $true)]
-        [string]$InstallationPath,
+        [string]$InstallPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ScriptPath,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$RuntimeArgs = @(),
 
         [Parameter(Mandatory = $false)]
         [Hashtable]$EnvironmentVars = @{ },
@@ -67,14 +73,23 @@ Function Install-NodeService () {
       #>
     )
   
+    if ($ScriptPath.Contains("'")) {
+        throw "The `$ScriptPath: $($ScriptPath) can not have an ' in the name of the path."
+    }
+
     # Force create the install directory.
-    New-Item -ItemType Directory -Force -Path $InstallationPath > $null
+    New-Item -ItemType Directory -Force -Path $InstallPath > $null
 
     $nodePath = (Get-Command -Name node -ErrorAction Stop).Path
     $exeName = "$ServiceName.exe"
-    $exeFullName = "$(Join-Path $InstallationPath $serviceName).exe"
+    $exeFullName = "$(Join-Path $InstallPath $serviceName).exe"
+    $scriptDir = $ScriptPath.Substring(0, $ScriptPath.LastIndexOf("\"));
+    $scriptName = $ScriptPath.Substring($ScriptPath.LastIndexOf("\") + 1);
+
     $logName = "Application"
     $envVars = [string]::Empty
+    $nodeRuntimeArgs = $RuntimeArgs -join " " 
+    $nodeArgs = ($nodeRuntimeArgs + " " + $scriptName).Trim()
     
     foreach ($key in $EnvironmentVars.Keys) {
         $value = $EnvironmentVars[$key];
@@ -146,7 +161,7 @@ public class Service_1 : ServiceBase
         CanStop = true;
         CanPauseAndContinue = false;
         AutoLog = true;
-        eventLog = new EventLog();
+         eventLog = new EventLog();
         if (!EventLog.SourceExists("$ServiceName"))
         {
             EventLog.CreateEventSource("$ServiceName", "$logName");
@@ -185,8 +200,7 @@ public class Service_1 : ServiceBase
         }
         catch (Exception e)
         {
-            // TODO: Add the full path to the .js file.
-            EventLog.WriteEntry("$ServiceName", "$exeName OnStart() // Failed to start. " + e.Message, EventLogEntryType.Error);
+            EventLog.WriteEntry("$ServiceName", "$ScriptPath OnStart() // Failed to start. " + e.Message, EventLogEntryType.Error);
 
             // Change the service state back to Stopped.
             serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
@@ -208,13 +222,13 @@ public class Service_1 : ServiceBase
         {
             serviceStatus.dwWaitHint = 0;
             SetServiceStatus(ServiceHandle, ref serviceStatus);
-            EventLog.WriteEntry("$ServiceName", "$exeName OnStart() // Exit");
+            EventLog.WriteEntry("$ServiceName", "$ScriptPath OnStart() // Exit");
         }
     }
 
     protected override void OnStop()
     {
-        EventLog.WriteEntry("$ServiceName", "$exeName OnStop()");
+        EventLog.WriteEntry("$ServiceName", "$ScriptPath OnStop()");
 
         _shutdownEvent.Set();
     }
@@ -239,12 +253,12 @@ public class Service_1 : ServiceBase
             {
                 p = new Process();
 
-                p.StartInfo.WorkingDirectory = @"C:\Users\mbramer\Documents\Install-NodeService\tools\NodeJS\bin\Debug"; // TODO: Slice the cwd from parameters.
+                p.StartInfo.WorkingDirectory = @"$scriptDir";
                 p.StartInfo.CreateNoWindow = true;
                 p.StartInfo.UseShellExecute = false;
                 p.StartInfo.RedirectStandardError = true;
                 p.StartInfo.FileName = @"$nodePath";
-                p.StartInfo.Arguments = @" index.js"; // TODO: Get args sorted for node.exe. // Works if path has spaces, but not if it contains ' quotes.
+                p.StartInfo.Arguments = @"$nodeArgs";
 
                 bool hasStarted = p.Start();
                 // Read the output stream first and then wait. (To avoid deadlocks says Microsoft!)
@@ -261,7 +275,7 @@ public class Service_1 : ServiceBase
                     throw new Exception(nodeError);
                 }
             }
-            catch (Exception e)
+            catch (Exception /* e */)
             {
                 numOfFailures++;
 
@@ -343,11 +357,9 @@ public class Service_1 : ServiceBase
         Write-error "Failed to **CREATE** the new $exeFullName Windows Service. $msg"
         exit 1
     }
-  
 }
 
 # $password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
 # $creds = New-Object System.Management.Automation.PSCredential("NT AUTHORITY\NETWORK SERVICE", (new-object System.Security.SecureString));
 # $creds = New-Object System.Management.Automation.PSCredential(".\LocalSystem", (new-object System.Security.SecureString));
-#  Install-NodeService -ServiceName MPBTest -InstallationPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -Credential $creds -Overwrite
-    
+# Install-NodeService -ServiceName MPBTest -InstallPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite    
