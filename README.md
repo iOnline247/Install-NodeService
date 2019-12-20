@@ -42,3 +42,26 @@ $creds = New-Object System.Management.Automation.PSCredential("DOMAIN\USERNAME",
 
 Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
 ```
+
+## Sample NodeJS script
+```javascript
+const fs = require("fs");
+const path = require("path");
+const filePath = path.join(__dirname, "env-vars.txt");
+
+fs.appendFileSync(filePath, JSON.stringify(process.env, null, "\t"));
+
+setInterval(_ => {
+  console.log(Date.now(), { test: true });
+}, 1000);
+
+// setTimeout(_ => {
+//   process.exit(0);
+
+//   throw new Error(
+//     JSON.stringify({ when: new Date().toISOString(), test: true })
+//   );
+// }, 5 * 1000);
+
+setInterval(() => {}, 1 << 30);
+```
