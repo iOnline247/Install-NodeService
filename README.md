@@ -7,6 +7,9 @@ Installs Windows Service and monitors the NodeJS Application.
 # Credentials will default to .\LocalSystem
 Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js"
 
+# Script Arguments (process.argv)
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -ScriptArgs @("oneArg", "-s", "b=5")
+
 # Environment Variables
 Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 }
 
@@ -36,6 +39,9 @@ Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATe
 - ScriptPath
     - Required `[string]` Path to where the .js is that will run in NodeJS.
 
+- ScriptArgs
+  - Optional `[string[]]` Arguments that will be available on `process.argv`.
+
 - DisplayName
     - Optional `[string]` Used for adding a Display Name that's different than the ServiceName.
 
@@ -62,9 +68,11 @@ Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATe
 ```javascript
 const fs = require("fs");
 const path = require("path");
-const filePath = path.join(__dirname, "env-vars.txt");
+const envPath = path.join(__dirname, "env-vars.txt");
+const argsPath = path.join(__dirname, "script-args.txt");
 
-fs.appendFileSync(filePath, JSON.stringify(process.env, null, "\t"));
+fs.appendFileSync(envPath, JSON.stringify(process.env, null, "\t"));
+fs.appendFileSync(argsPath, JSON.stringify(process.argv, null, "\t"));
 
 setInterval(_ => {
   console.log(Date.now(), { test: true });
