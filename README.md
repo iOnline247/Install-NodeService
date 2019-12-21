@@ -2,6 +2,29 @@
 Installs Windows Service and monitors the NodeJS Application.
 
 ## Usage
+## Examples
+```powershell
+# Credentials will default to .\LocalSystem
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js"
+
+# Environment Variables
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 }
+
+# NodeJS Runtime Arguments
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -RuntimeArgs "--harmony"
+
+# Overwrite switch: Use with caution! This will delete the Windows Service that matches the `ServiceName` provided.
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -Overwrite
+
+# With service account.
+$password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
+$creds = New-Object System.Management.Automation.PSCredential("DOMAIN\USERNAME", $password);
+
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -Credential $creds
+
+# All together now...
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
+```
 ### Script Parameters
 
 - ServiceName
@@ -34,14 +57,6 @@ Installs Windows Service and monitors the NodeJS Application.
 
 - Overwrite
     - Optional `[switch]` Use with caution. This will overwrite whatever ServiceName that is given.
-
-## Examples
-```powershell
-$password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
-$creds = New-Object System.Management.Automation.PSCredential("DOMAIN\USERNAME", $password);
-
-Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
-```
 
 ## Sample NodeJS script
 ```javascript
