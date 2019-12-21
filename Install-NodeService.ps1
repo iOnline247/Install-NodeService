@@ -24,6 +24,9 @@ Function Install-NodeService () {
   .PARAMETER ScriptPath
   Required [string] Path to where the .js is that will run in NodeJS.
 
+  .PARAMETER ScriptArgs
+  Optional [string[]] Arguments that will be available on `process.argv`.
+
   .PARAMETER DisplayName
   Optional [string] Used for adding a Display Name that's different than
   the ServiceName.
@@ -58,37 +61,40 @@ Function Install-NodeService () {
 #>
 
   Param (      
-      [Parameter(Mandatory = $true)]
-      [string]$ServiceName,
+    [Parameter(Mandatory = $true)]
+    [string]$ServiceName,
 
-      [Parameter(Mandatory = $false)]
-      [string]$Description,
+    [Parameter(Mandatory = $true)]
+    [string]$InstallPath,
 
-      [Parameter(Mandatory = $false)]
-      [string]$DisplayName,
+    [Parameter(Mandatory = $true)]
+    [string]$ScriptPath,
 
-      [Parameter(Mandatory = $true)]
-      [string]$InstallPath,
+    [Parameter(Mandatory = $false)]
+    [string[]]$ScriptArgs,
 
-      [Parameter(Mandatory = $false)]
-      [Hashtable]$EnvironmentVars = @{ },
-      
-      [Parameter(Mandatory = $true)]
-      [string]$ScriptPath,
+    [Parameter(Mandatory = $false)]
+    [string]$Description,
 
-      [Parameter(Mandatory = $false)]
-      [string[]]$RuntimeArgs = @(),
+    [Parameter(Mandatory = $false)]
+    [string]$DisplayName,
 
-      [Parameter(Mandatory = $true)]
-      [pscredential]
-      $Credential,
+    [Parameter(Mandatory = $false)]
+    [Hashtable]$EnvironmentVars = @{ },
 
-      [Parameter(Mandatory = $false)]
-      [switch]$Overwrite
+    [Parameter(Mandatory = $false)]
+    [string[]]$RuntimeArgs = @(),
+
+    [Parameter(Mandatory = $true)]
+    [pscredential]
+    $Credential,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Overwrite
   )
 
   if ($ScriptPath.Contains("'")) {
-      throw "The `$ScriptPath: $($ScriptPath) can not have an ' in the name of the path."
+    throw "The `$ScriptPath: $($ScriptPath) can not have an ' in the name of the path."
   }
 
   # Force create the install directory.
@@ -104,14 +110,14 @@ Function Install-NodeService () {
   $logName = "Application"
   $envVars = [string]::Empty
   $nodeRuntimeArgs = $RuntimeArgs -join " " 
-  $nodeArgs = ($nodeRuntimeArgs + " " + $scriptName).Trim()
+  $nodeArgs = ($nodeRuntimeArgs + " " + $scriptName + " " + $ScriptArgs).Trim()
   
   foreach ($key in $EnvironmentVars.Keys) {
-      $value = $EnvironmentVars[$key];
-      $isBoolean = $value -is [boolean]
-      $value = if ($isBoolean) { "$($value)".ToLower() } else { $value }; 
+    $value = $EnvironmentVars[$key];
+    $isBoolean = $value -is [boolean]
+    $value = if ($isBoolean) { "$($value)".ToLower() } else { $value }; 
 
-      $envVars += "Environment.SetEnvironmentVariable(`"$key`", `"$($value)`");"
+    $envVars += "Environment.SetEnvironmentVariable(`"$key`", `"$($value)`");"
   }
 
   $source = @"
@@ -314,63 +320,63 @@ public class Service_1 : ServiceBase
   $source = $source.Replace("{{EnvironmentVars}}", $envVars);
    
   Function New-NodeServiceInstall ($binPath) {      
-      Write-Output "Installing the $serviceName service...";
+    Write-Output "Installing the $serviceName service...";
   
-      $scriptVars = @{
-          BinaryPathName = $binPath
-          Credential     = $Credential
-          DisplayName    = if ($DisplayName) { $DisplayName } else { $ServiceName }
-          Name           = $serviceName
-          StartupType    = "Automatic"
-      }
-      $descriptionFooter = "This service was brought to you by Matthew Bramer and is maintained here: https://github.com/iOnline247/Install-NodeService"
+    $scriptVars = @{
+      BinaryPathName = $binPath
+      Credential     = $Credential
+      DisplayName    = if ($DisplayName) { $DisplayName } else { $ServiceName }
+      Name           = $serviceName
+      StartupType    = "Automatic"
+    }
+    $descriptionFooter = "This service was brought to you by Matthew Bramer and is maintained here: https://github.com/iOnline247/Install-NodeService"
 
-      if ($Description) {
-          $scriptVars.Description = $Description, $descriptionFooter -join "`n`n"
-      }
-      else {
-          $scriptVars.Description = $descriptionFooter
-      }
+    if ($Description) {
+      $scriptVars.Description = $Description, $descriptionFooter -join "`n`n"
+    }
+    else {
+      $scriptVars.Description = $descriptionFooter
+    }
 
-      New-Service @scriptVars -ErrorAction Stop > $null
-      Write-Output "$serviceName service has been installed.";
-      Get-Service $serviceName | Start-Service
-      Write-Output "The $serviceName service is now operational.";
+    New-Service @scriptVars -ErrorAction Stop > $null
+    Write-Output "$serviceName service has been installed.";
+    Get-Service $serviceName | Start-Service
+    Write-Output "The $serviceName service is now operational.";
   }
 
   try {
-      if ($Overwrite) {
-          if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
-              # The Mickey Mouse Console prevents handles of services to be released.
-              Get-Process -Name "mmc" | Stop-Process > $null
+    if ($Overwrite) {
+      if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
+        # The Mickey Mouse Console prevents handles of services to be released.
+        Get-Process -Name "mmc" | Stop-Process > $null
       
-              Write-Output "Deleting the existing $serviceName service...";
-              Stop-Service $serviceName -Force
-              # Remove the service prior to installation.
-              sc.exe delete $serviceName > $null
+        Write-Output "Deleting the existing $serviceName service...";
+        Stop-Service $serviceName -Force
+        # Remove the service prior to installation.
+        sc.exe delete $serviceName > $null
       
-              Write-Output "$serviceName service has been deleted.";
-          }
+        Write-Output "$serviceName service has been deleted.";
       }
+    }
 
-      Write-Verbose "Compiling $exeFullName"
-      Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
+    Write-Verbose "Compiling $exeFullName"
+    Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
   }
   catch {
-      $msg = $_.Exception.Message
+    $msg = $_.Exception.Message
 
-      Write-error "Failed to **COMPILE** the $exeFullName service. $msg"
-      exit 1
+    Write-error "Failed to **COMPILE** the $exeFullName service. $msg"
+    exit 1
   }
 
   try {
-      New-NodeServiceInstall -binPath $exeFullName
+    New-NodeServiceInstall -binPath $exeFullName
   }
   catch {
-      $msg = $_.Exception.Message
+    $msg = $_.Exception.Message
       
-      Write-error "Failed to **CREATE** the new $exeFullName Windows Service. $msg"
-      exit 1
+    Write-error "Failed to **CREATE** the new $exeFullName Windows Service. $msg"
+    exit 1
   }
 }
 
