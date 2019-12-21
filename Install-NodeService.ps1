@@ -390,7 +390,7 @@ public class Service_1 : ServiceBase
     }
 
     if ($DebugMode) {
-      $debugFile = "$InstallPath\$ServiceName.cs"
+      $debugFile = "$InstallPath\$ServiceName.cs.txt"
       
       $source > $debugFile
       Invoke-Item $debugFile
