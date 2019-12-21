@@ -2,7 +2,6 @@
 #                                                                             #
 #   File name       Install-NodeService.ps1                                   #
 #                                                                             #
-#   Description     Insert "$(hostname): " ahead of every output line.        #
 # Licensed under the Apache 2.0 license - www.apache.org/licenses/LICENSE-2.0 #
 ###############################################################################
 
@@ -12,7 +11,9 @@ Function Install-NodeService () {
   Creates Windows Service that monitors/restarts a NodeJS application.
 
   .DESCRIPTION
-    TODO
+  Give the path to a NodeJS script that you'd like to run as a Windows
+  Service. This cmdlet will compile the C# necessary to create the 
+  service, then install it.
 
   .PARAMETER ServiceName
   Required [string] This will be the name of the Windows Service.
@@ -53,11 +54,37 @@ Function Install-NodeService () {
   .PARAMETER Overwrite
   Optional [switch] Use with caution. This will overwrite whatever ServiceName that is given.
 
+  .PARAMETER DebugMode
+  Optional [switch] Instead of installing the Windows Service, the C# generated will be saved 
+  into a file within the InstallPath named: <ServiceName>.cs
+
   .EXAMPLE
+  # Credentials will default to .\LocalSystem
+  Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js"
+
+  # Script Arguments (process.argv)
+  Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -ScriptArgs @("oneArg", "-s", "b=5")
+
+  # Environment Variables
+  Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 }
+
+  # NodeJS Runtime Arguments
+  Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -RuntimeArgs "--harmony"
+
+  # Overwrite switch: Use with caution! This will delete the Windows Service that matches the `ServiceName` provided.
+  Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -Overwrite
+
+  # With service account.
+  $password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
+  $creds = New-Object System.Management.Automation.PSCredential("DOMAIN\USERNAME", $password);
+
+  Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -Credential $creds
+
+  # Use a different service account with -Credential parameter
   $password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
   $creds = New-Object System.Management.Automation.PSCredential("DOMAIN\USERNAME", $password);
   
-  Install-NodeService -ServiceName MPBTest -InstallPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
+  Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
 #>
 
   Param (      
@@ -90,7 +117,10 @@ Function Install-NodeService () {
     $Credential,
 
     [Parameter(Mandatory = $false)]
-    [switch]$Overwrite
+    [switch]$Overwrite,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DebugMode
   )
 
   if ($ScriptPath.Contains("'")) {
@@ -318,7 +348,7 @@ public class Service_1 : ServiceBase
 "@
 
   $source = $source.Replace("{{EnvironmentVars}}", $envVars);
-   
+
   Function New-NodeServiceInstall ($binPath) {      
     Write-Output "Installing the $serviceName service...";
   
@@ -359,14 +389,24 @@ public class Service_1 : ServiceBase
       }
     }
 
-    Write-Verbose "Compiling $exeFullName"
-    Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
+    if ($DebugMode) {
+      $debugFile = "$InstallPath\$ServiceName.cs"
+      
+      $source > $debugFile
+      Invoke-Item $debugFile
+
+      return;
+    }
+    else {
+      Write-Verbose "Compiling $exeFullName"
+      Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
+    }
   }
   catch {
     $msg = $_.Exception.Message
 
     Write-error "Failed to **COMPILE** the $exeFullName service. $msg"
-    exit 1
+    return;
   }
 
   try {
@@ -376,7 +416,7 @@ public class Service_1 : ServiceBase
     $msg = $_.Exception.Message
       
     Write-error "Failed to **CREATE** the new $exeFullName Windows Service. $msg"
-    exit 1
+    return;
   }
 }
 
