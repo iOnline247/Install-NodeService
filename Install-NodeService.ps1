@@ -112,7 +112,7 @@ Function Install-NodeService () {
     [Parameter(Mandatory = $false)]
     [string[]]$RuntimeArgs = @(),
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [pscredential]
     $Credential,
 
@@ -147,7 +147,7 @@ Function Install-NodeService () {
     $isBoolean = $value -is [boolean]
     $value = if ($isBoolean) { "$($value)".ToLower() } else { $value }; 
 
-    $envVars += "Environment.SetEnvironmentVariable(`"$key`", `"$($value)`");"
+    $envVars += "Environment.SetEnvironmentVariable(`"$key`", `"$value`");"
   }
 
   $source = @"
@@ -219,7 +219,7 @@ public class Service_1 : ServiceBase
       }
       eventLog.Source = "$ServiceName";
       eventLog.Log = "$logName";
-      EventLog.WriteEntry("$ServiceName", "$exeName $ServiceName()");
+      EventLog.WriteEntry("$ServiceName", @"$exeName will run this script now: $ScriptPath");
   }
 
   [DllImport("advapi32.dll", SetLastError = true)]
@@ -227,7 +227,7 @@ public class Service_1 : ServiceBase
 
   protected override void OnStart(string[] args)
   {
-      EventLog.WriteEntry("$ServiceName", "$exeName OnStart() // Entry.");
+      EventLog.WriteEntry("$ServiceName", @"$exeName OnStart()");
       // Set the service state to Start Pending.
       // Only useful if the startup time is long. Not really necessary here for a 2s startup time.
       serviceStatus.dwServiceType = ServiceType.SERVICE_WIN32_OWN_PROCESS;
@@ -251,7 +251,7 @@ public class Service_1 : ServiceBase
       }
       catch (Exception e)
       {
-          EventLog.WriteEntry("$ServiceName", "$escapedScriptPath OnStart() // Failed to start. " + e.Message, EventLogEntryType.Error);
+          EventLog.WriteEntry("$ServiceName", @"$ScriptPath OnStart() // Failed to start. " + e.Message, EventLogEntryType.Error);
 
           // Change the service state back to Stopped.
           serviceStatus.dwCurrentState = ServiceState.SERVICE_STOPPED;
@@ -273,13 +273,13 @@ public class Service_1 : ServiceBase
       {
           serviceStatus.dwWaitHint = 0;
           SetServiceStatus(ServiceHandle, ref serviceStatus);
-          EventLog.WriteEntry("$ServiceName", "$escapedScriptPath OnStart() // Exit");
+          EventLog.WriteEntry("$ServiceName", @"$ScriptPath // Exited OnStart()");
       }
   }
 
   protected override void OnStop()
   {
-      EventLog.WriteEntry("$ServiceName", "$escapedScriptPath OnStop()");
+      EventLog.WriteEntry("$ServiceName", @"$ScriptPath OnStop()");
 
       _shutdownEvent.Set();
   }
@@ -352,20 +352,26 @@ public class Service_1 : ServiceBase
   Function New-NodeServiceInstall ($binPath) {      
     Write-Output "Installing the $serviceName service...";
   
-    $scriptVars = @{
-      BinaryPathName = $binPath
-      Credential     = $Credential
-      DisplayName    = if ($DisplayName) { $DisplayName } else { $ServiceName }
-      Name           = $serviceName
-      StartupType    = "Automatic"
+    if ($Credential -eq $null) {
+      $Credential = New-Object System.Management.Automation.PSCredential(".\LocalSystem", (new-object System.Security.SecureString));
     }
+
     $descriptionFooter = "This service was brought to you by Matthew Bramer and is maintained here: https://github.com/iOnline247/Install-NodeService"
 
     if ($Description) {
-      $scriptVars.Description = $Description, $descriptionFooter -join "`n`n"
+      $Description = $Description, $descriptionFooter -join "`n`n"
     }
     else {
-      $scriptVars.Description = $descriptionFooter
+      $Description = $descriptionFooter
+    }
+
+    $scriptVars = @{
+      BinaryPathName = $binPath
+      Credential     = $Credential
+      Description    = $Description
+      DisplayName    = if ($DisplayName) { $DisplayName } else { $ServiceName }
+      Name           = $serviceName
+      StartupType    = "Automatic"
     }
 
     New-Service @scriptVars -ErrorAction Stop > $null
@@ -378,7 +384,7 @@ public class Service_1 : ServiceBase
     if ($Overwrite) {
       if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
         # The Mickey Mouse Console prevents handles of services to be released.
-        Get-Process -Name "mmc" | Stop-Process > $null
+        Get-Process -Name "mmc" -ErrorAction SilentlyContinue | Stop-Process > $null
       
         Write-Output "Deleting the existing $serviceName service...";
         Stop-Service $serviceName -Force
@@ -414,7 +420,7 @@ public class Service_1 : ServiceBase
   }
   catch {
     $msg = $_.Exception.Message
-      
+
     Write-error "Failed to **CREATE** the new $exeFullName Windows Service. $msg"
     return;
   }
@@ -423,4 +429,4 @@ public class Service_1 : ServiceBase
 # $password = "myPassword" | ConvertTo-SecureString -asPlainText -Force
 # $creds = New-Object System.Management.Automation.PSCredential("NT AUTHORITY\NETWORK SERVICE", (new-object System.Security.SecureString));
 # $creds = New-Object System.Management.Automation.PSCredential(".\LocalSystem", (new-object System.Security.SecureString));
-# Install-NodeService -ServiceName MPBTest -InstallPath 'C:\Program Files\AAATest' -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
+# Install-NodeService -ServiceName MPBTest -InstallPath 'C:\Program Files\AAATest' -ScriptPath "C:\Users\Matthew\Documents\GitHub\Install-NodeService\Deployment\dist\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
