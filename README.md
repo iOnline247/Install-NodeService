@@ -53,7 +53,8 @@ Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATe
 
 - EnvironmentVars
     - Optional `[Hashtable]` Pass environment variables to the NodeJS process. ex: `-EnvironmentVars @{ NODE_ENV = "DEV"; LOG_LEVEL = "Trace" }`
-- RecoveryConfig: This has 3 properties; `maxRestarts`, `wait`, and `grow`. `wait` is the number of seconds before restarting the NodeJS process. `grow` is the percentage applied to each new attempt to restart the process. e.g. `wait` = 60 & `grow` = .5. The second attempt will start 90 seconds and continue to grow until `maxRestarts` has happened.
+
+- RecoveryConfig: This has 3 properties; `maxRestarts`, `wait`, and `grow`. `wait` represents the number of seconds before restarting the NodeJS process. `grow` represents the percentage applied to each attempt to restart the process. e.g. `wait` = 60 & `grow` = .5. The second attempt will start 90 seconds later and continue to grow until `maxRestarts` has been reached.
     - Optional `[Hashtable]` Control how many restarts of the application before exiting. ex: `-RecoveryConfig @{ maxRestarts = 5; wait = 60; grow = .5 }`
 
 - Credential
