@@ -421,6 +421,15 @@ Function Install-NodeService () {
   }
 
   try {
+    if ($DebugMode) {
+      $debugFile = "$InstallPath\$ServiceName.cs.txt"
+      
+      $source > $debugFile
+      Invoke-Item $debugFile
+
+      return;
+    }
+
     if ($Overwrite) {
       if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
         # The Mickey Mouse Console prevents handles of services to be released.
@@ -434,19 +443,9 @@ Function Install-NodeService () {
         Write-Output "$serviceName service has been deleted.";
       }
     }
-
-    if ($DebugMode) {
-      $debugFile = "$InstallPath\$ServiceName.cs.txt"
-      
-      $source > $debugFile
-      Invoke-Item $debugFile
-
-      return;
-    }
-    else {
-      Write-Verbose "Compiling $exeFullName"
-      Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
-    }
+    
+    Write-Verbose "Compiling $exeFullName"
+    Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $exeFullName -OutputType ConsoleApplication -ReferencedAssemblies "System.ServiceProcess" -Debug:$false
   }
   catch {
     $msg = $_.Exception.Message
