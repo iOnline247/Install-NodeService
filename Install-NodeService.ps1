@@ -43,6 +43,11 @@ Function Install-NodeService () {
   Optional [Hashtable] Pass environment variables to the NodeJS process.
   ex: -EnvironmentVars @{ NODE_ENV = "DEV"; LOG_LEVEL = "Trace" }
 
+  .PARAMETER RecoveryConfig
+  Optional [Hashtable] Control how many restarts of the application before
+  exiting.
+  ex: -RecoveryConfig @{ maxRestarts = 5; wait = 60; grow = .5 }
+
   .PARAMETER Credential
   Optional [PSCredential] Configures service account for the Windows Service.
   If not used, the default .\LocalSystem will be used.
@@ -113,6 +118,9 @@ Function Install-NodeService () {
     [string[]]$RuntimeArgs = @(),
 
     [Parameter(Mandatory = $false)]
+    [Hashtable]$RecoveryConfig,
+
+    [Parameter(Mandatory = $false)]
     [pscredential]
     $Credential,
 
@@ -130,7 +138,6 @@ Function Install-NodeService () {
   # Force create the install directory.
   New-Item -ItemType Directory -Force -Path $InstallPath > $null
 
-  $escapedScriptPath = $ScriptPath.Replace("\", "\\");
   $nodePath = (Get-Command -Name node -ErrorAction Stop).Path
   $exeName = "$ServiceName.exe"
   $exeFullName = "$(Join-Path $InstallPath $serviceName).exe"
@@ -141,6 +148,17 @@ Function Install-NodeService () {
   $envVars = [string]::Empty
   $nodeRuntimeArgs = $RuntimeArgs -join " " 
   $nodeArgs = ($nodeRuntimeArgs + " " + $scriptName + " " + $ScriptArgs).Trim()
+  $recoveryConfigDefaults = @{ maxRestarts = 5; wait = 60; grow = .5 }
+
+  if ($null -ne $RecoveryConfig) {
+    foreach ($key in $recoveryConfigDefaults.Keys) {
+      if ($null -eq $RecoveryConfig[$key]) {
+        $RecoveryConfig[$key] = $recoveryConfigDefaults[$key]
+      }
+    }
+  } else {
+    $RecoveryConfig = $recoveryConfigDefaults
+  }
   
   foreach ($key in $EnvironmentVars.Keys) {
     $value = $EnvironmentVars[$key];
@@ -300,6 +318,9 @@ Function Install-NodeService () {
       private void WorkerThreadFunc()
       {
           int numOfFailures = 0;
+          int maxRestarts = $($RecoveryConfig.maxRestarts);
+          double waitInSeconds = $($RecoveryConfig.wait);
+          double growBy = $($RecoveryConfig.grow);
   
           {{EnvironmentVars}}
 
@@ -339,15 +360,22 @@ Function Install-NodeService () {
               catch (Exception e)
               {
                   numOfFailures++;
-  
-                  if (numOfFailures > 6) // TODO: Make this configurable.
+
+                  if (numOfFailures > maxRestarts)
                   {
                       EventLog.WriteEntry("$ServiceName", e.Message, EventLogEntryType.Error);
                       OnStop();
                   }
                   else
                   {
+                      if (numOfFailures > 1)
+                      {
+                          waitInSeconds += (1 * growBy) * waitInSeconds;
+                      }
+
                       nodeProcess = null;
+
+                      Thread.Sleep((int)(waitInSeconds * 1000));
                   }
               }
           }
@@ -356,7 +384,7 @@ Function Install-NodeService () {
       {
           ServiceBase.Run(new Service_1());
       }
-  }  
+  }
 "@
 
   $source = $source.Replace("{{EnvironmentVars}}", $envVars);
