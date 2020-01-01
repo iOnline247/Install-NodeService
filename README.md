@@ -26,7 +26,7 @@ $creds = New-Object System.Management.Automation.PSCredential("DOMAIN\USERNAME",
 Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -Credential $creds
 
 # All together now...
-Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -Credential $creds -Overwrite
+Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATest" -ScriptPath "C:\Program Files\AAATest\NodeJS\index.js" -EnvironmentVars @{ stringy = 'here'; truthy = $true; number = 0 } -RuntimeArgs "--harmony" -RecoveryConfig @{ maxRestarts = 10; wait = 5; grow = .3 } -Credential $creds -Overwrite
 ```
 ### Script Parameters
 
@@ -53,6 +53,8 @@ Install-NodeService -ServiceName iOnline247 -InstallPath "C:\Program Files\AAATe
 
 - EnvironmentVars
     - Optional `[Hashtable]` Pass environment variables to the NodeJS process. ex: `-EnvironmentVars @{ NODE_ENV = "DEV"; LOG_LEVEL = "Trace" }`
+- RecoveryConfig: This has 3 properties; `maxRestarts`, `wait`, and `grow`. `wait` is the number of seconds before restarting the NodeJS process. `grow` is the percentage applied to each new attempt to restart the process. e.g. `wait` = 60 & `grow` = .5. The second attempt will start 90 seconds and continue to grow until `maxRestarts` has happened.
+    - Optional `[Hashtable]` Control how many restarts of the application before exiting. ex: `-RecoveryConfig @{ maxRestarts = 5; wait = 60; grow = .5 }`
 
 - Credential
     - Optional `[PSCredential]` Configures service account for the Windows Service. If not used, the default .\LocalSystem will be used.
